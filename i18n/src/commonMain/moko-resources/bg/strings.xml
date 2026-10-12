@@ -598,7 +598,7 @@
     <string name="source_filter_empty_screen">Не беше намерен инсталиран източник</string>
     <string name="action_remove_everything">Премахни всичко</string>
     <string name="ext_info_version">Версия</string>
-    <string name="on_hiatus">В хиатус</string>
+    <string name="on_hiatus">Прекъсната за неопределен период</string>
     <string name="custom_cover">Корица по избор</string>
     <string name="action_search_hint">Търсене…</string>
     <string name="disabled_nav">Деактивирано</string>
@@ -731,4 +731,6 @@
     <string name="onboarding_permission_install_apps">Разрешение за инсталиране на приложения</string>
     <string name="onboarding_permission_ignore_battery_opts">Фоново потребление на батерията</string>
     <string name="onboarding_storage_info">Избери папка, където %1$s ще съхранява изтеглени глави, резервни копия и други.\n\nПрепоръчва се специална папка.\nИзбрана папка: %2$s</string>
+    <string name="logging_in">Влизане…</string>
+    <string name="action_copy_to_clipboard">Копирай на клипборда</string>
 </resources>
