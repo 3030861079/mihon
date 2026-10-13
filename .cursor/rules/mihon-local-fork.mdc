@@ -1,0 +1,28 @@
+---
+description: Local Mihon fork workflow — build/install, hidden space, Gradle mirrors
+alwaysApply: true
+---
+
+# Mihon local fork conventions
+
+## Build & install
+
+- Default local flow: `build-local.bat` (no args) → `:app:assembleRelease` then `adb install -r` **arm64-v8a** only.
+- Prefer release + single ABI (~37MB). Do not install universal/debug for daily use.
+- JDK 21 is required (`JAVA_HOME` is set inside `build-local.bat`).
+- Device install target: connected phone via SDK `platform-tools\adb.exe`.
+- After feature fixes the user wants, **compile and install to the phone** unless they say otherwise.
+
+## Hidden space
+
+- Entries are hidden if the **manga id** or its **source id** is in `hidden_item`.
+- UI lists (library, history, updates, upcoming, search, downloads, widgets) must use `isVisibleInHiddenSpace` / equivalent; workers use unfiltered `GetLibraryManga.await()`.
+- Widgets and launcher surfaces must **always exclude** hidden entries (never follow in-app hidden mode).
+- Global search must not resurrect pruned sources via async `updateItem`.
+- Multi-lang catalogues sharing a name are grouped in `HiddenManagerSheet` (one checkbox for all langs; expandable per-lang).
+
+## Gradle mirrors
+
+- `settings.gradle.kts` / `gradle/build-logic/settings.gradle.kts`: put `m2-local` then **google()/mavenCentral()** before Tencent/Aliyun mirrors (mirrors often have pom without jar).
+- Missing jars can be dropped into `D:\Codex\m2-local` as a last resort.
+- Remote for personal work: `fork` → `https://github.com/3030861079/mihon.git` (branch `feature/hidden-space-and-connectivity`). `origin` is upstream read-only.
