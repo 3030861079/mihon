@@ -5,14 +5,13 @@ dependencyResolutionManagement {
         // Gradle 命中元数据的仓库即锁定构件来源，不会回退，故把最全的源放最前。
         // 还原：git checkout gradle/build-logic/settings.gradle.kts
         maven(url = "file:///D:/Codex/m2-local")
-        maven(url = "https://mirrors.cloud.tencent.com/nexus/repository/maven-public")
-        maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
         google()
-        maven(url = "https://maven.aliyun.com/repository/public")
-        maven(url = "https://maven.aliyun.com/repository/google")
-        // ===== 以下是上游原始配置，保留作为兜底 =====
         mavenCentral()
         gradlePluginPortal()
+        maven(url = "https://mirrors.cloud.tencent.com/nexus/repository/maven-public")
+        maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
+        maven(url = "https://maven.aliyun.com/repository/public")
+        maven(url = "https://maven.aliyun.com/repository/google")
     }
     versionCatalogs {
         create("libs") {

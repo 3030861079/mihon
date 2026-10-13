@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import tachiyomi.domain.hidden.HiddenModeManager
 import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.isVisibleInHiddenSpace
 import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.history.model.History
 import tachiyomi.domain.history.model.HistoryWithRelations
@@ -25,9 +26,18 @@ class GetHistory(
         return combine(
             repository.getHistory(query),
             getHiddenIds.subscribe(HiddenItemType.Manga),
+            getHiddenIds.subscribe(HiddenItemType.Source),
             hiddenMode.active,
-        ) { history, hidden, inHiddenSpace ->
-            history.filter { (it.mangaId in hidden) == inHiddenSpace }
+        ) { history, hiddenManga, hiddenSources, inHiddenSpace ->
+            history.filter {
+                isVisibleInHiddenSpace(
+                    mangaId = it.mangaId,
+                    sourceId = it.coverData.sourceId,
+                    hiddenMangaIds = hiddenManga,
+                    hiddenSourceIds = hiddenSources,
+                    inHiddenSpace = inHiddenSpace,
+                )
+            }
         }
     }
 }

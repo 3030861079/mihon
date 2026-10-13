@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,6 +107,10 @@ object HomeScreen : Screen() {
         var showHiddenManager by remember { mutableStateOf(false) }
         var hiddenTapCount by remember { mutableIntStateOf(0) }
         var hiddenTapAt by remember { mutableLongStateOf(0L) }
+        val density = LocalDensity.current
+        val statusBarTopPx = WindowInsets.statusBars.getTop(density).toFloat()
+        val hiddenTapRegionWidthPx = with(density) { 180.dp.toPx() }
+        val hiddenTapRegionHeightPx = with(density) { 56.dp.toPx() }
 
         TabNavigator(
             tab = LibraryTab,
@@ -117,10 +122,12 @@ object HomeScreen : Screen() {
                     modifier = Modifier
                         .fillMaxSize()
                         // Observe top-left title taps without consuming them, so toolbar actions still work.
-                        .pointerInput(hiddenSpaceActive) {
-                            val regionWidth = 180.dp.toPx()
-                            val regionHeight = 56.dp.toPx()
-                            val statusBarTop = WindowInsets.statusBars.getTop(this).toFloat()
+                        .pointerInput(
+                            hiddenSpaceActive,
+                            statusBarTopPx,
+                            hiddenTapRegionWidthPx,
+                            hiddenTapRegionHeightPx,
+                        ) {
                             awaitPointerEventScope {
                                 while (true) {
                                     val down = awaitPointerEvent(PointerEventPass.Initial)
@@ -128,8 +135,8 @@ object HomeScreen : Screen() {
                                         .firstOrNull { it.pressed && !it.previousPressed }
                                         ?: continue
                                     val pos = down.position
-                                    if (pos.x !in 0f..regionWidth ||
-                                        pos.y !in statusBarTop..(statusBarTop + regionHeight)
+                                    if (pos.x !in 0f..hiddenTapRegionWidthPx ||
+                                        pos.y !in statusBarTopPx..(statusBarTopPx + hiddenTapRegionHeightPx)
                                     ) {
                                         continue
                                     }

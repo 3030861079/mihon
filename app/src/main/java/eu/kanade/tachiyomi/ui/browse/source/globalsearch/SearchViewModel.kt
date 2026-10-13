@@ -15,6 +15,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -78,6 +80,25 @@ abstract class SearchViewModel(
                 state.update { it.copy(onlyShowHasResults = onlyShowHasResults) }
             }
         }
+
+        // Keep results aligned with the Sources tab: drop hidden (or non-hidden) sources as the
+        // session/toggle changes, and allow the same query to be searched again afterwards.
+        viewModelScope.launch {
+            var primed = false
+            combine(
+                getHiddenIds.subscribe(HiddenItemType.Source),
+                hiddenMode.active,
+            ) { hidden, inHiddenSpace -> hidden to inHiddenSpace }
+                .distinctUntilChanged()
+                .collectLatest { (hidden, inHiddenSpace) ->
+                    pruneItemsForHiddenSpace(hidden, inHiddenSpace)
+                    if (primed) {
+                        lastQuery = null
+                        lastSourceFilter = null
+                    }
+                    primed = true
+                }
+        }
     }
 
     @Composable
@@ -96,7 +117,7 @@ abstract class SearchViewModel(
         val inHiddenSpace = hiddenMode.active.value
         return sourceManager.getAll()
             .filter { (it.lang in enabledLanguages || it.isLocal()) && "${it.id}" !in disabledSources }
-            .filter { (it.id in hidden) == inHiddenSpace }
+            .filter { source -> isSourceVisible(source.id, hidden, inHiddenSpace) }
             .sortedWith(
                 compareBy(
                     { "${it.id}" !in pinnedSources },
@@ -107,16 +128,36 @@ abstract class SearchViewModel(
 
     private suspend fun getSelectedSources(): List<Source> {
         val enabledSources = getEnabledSources()
+        val enabledIds = enabledSources.mapTo(mutableSetOf()) { it.id }
 
         val filter = extensionFilter
         if (filter.isNullOrEmpty()) {
             return enabledSources
         }
 
+        // Match by id — extension Source instances are not always the same references as getAll().
         return extensionManager.getLoadedExtensions()
             .filter { it.pkgName == filter }
             .flatMap { it.sources }
-            .filter { it in enabledSources }
+            .filter { it.id in enabledIds }
+    }
+
+    private fun isSourceVisible(sourceId: Long, hidden: Set<Long>, inHiddenSpace: Boolean): Boolean {
+        return (sourceId in hidden) == inHiddenSpace
+    }
+
+    private fun pruneItemsForHiddenSpace(hidden: Set<Long>, inHiddenSpace: Boolean) {
+        state.update { current ->
+            if (current.items.isEmpty()) return@update current
+            val kept = current.items.filterKeys { source ->
+                isSourceVisible(source.id, hidden, inHiddenSpace)
+            }
+            if (kept.size == current.items.size) {
+                current
+            } else {
+                current.copy(items = kept.toSortedMap(sortComparator(kept)))
+            }
+        }
     }
 
     fun updateSearchQuery(query: String?) {
@@ -149,23 +190,21 @@ abstract class SearchViewModel(
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             val sources = getSelectedSources()
 
-            // Reuse previous results if possible
+            // Reuse previous results if possible (match by source id, not instance)
             if (sameQuery) {
-                val existingResults = state.value.items
+                val existingById = state.value.items.mapKeys { it.key.id }
                 updateItems(
-                    sources
-                        .associateWith { existingResults[it] ?: SearchItemResult.Loading },
+                    sources.associateWith { existingById[it.id] ?: SearchItemResult.Loading },
                 )
             } else {
                 updateItems(
-                    sources
-                        .associateWith { SearchItemResult.Loading },
+                    sources.associateWith { SearchItemResult.Loading },
                 )
             }
 
             sources.map { source ->
                 async {
-                    if (state.value.items[source] !is SearchItemResult.Loading) {
+                    if (!isSourceStillSelected(source)) {
                         return@async
                     }
 
@@ -202,9 +241,18 @@ abstract class SearchViewModel(
         }
     }
 
+    /** True only while this source is still part of the current result set (and still Loading). */
+    private fun isSourceStillSelected(source: Source): Boolean {
+        val current = state.value.items.entries.firstOrNull { it.key.id == source.id } ?: return false
+        return current.value is SearchItemResult.Loading
+    }
+
     private fun updateItem(source: Source, result: SearchItemResult) {
         state.update { currentState ->
-            val newItems = currentState.items + (source to result)
+            // Match by id and refuse to resurrect sources removed by the hidden-space prune.
+            val key = currentState.items.keys.firstOrNull { it.id == source.id }
+                ?: return@update currentState
+            val newItems = currentState.items + (key to result)
             currentState.copy(
                 items = newItems.toSortedMap(sortComparator(newItems)),
             )

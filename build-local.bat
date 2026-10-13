@@ -23,6 +23,7 @@ if "%~1"=="" goto default
 if /I "%~1"=="help" goto usage
 if /I "%~1"=="-h" goto usage
 if /I "%~1"=="--help" goto usage
+if /I "%~1"=="install" goto install
 
 echo Using JDK: %JAVA_HOME%
 call "%~dp0gradlew.bat" %* --console=plain
@@ -31,15 +32,33 @@ exit /b %ERRORLEVEL%
 :default
 echo Using JDK: %JAVA_HOME%
 echo.
-echo [default] :app:assembleRelease  (install arm64 APK only after build)
-echo Output: app\build\outputs\apk\release\app-arm64-v8a-release.apk
+echo [default] assembleRelease + install arm64 APK
 echo.
 call "%~dp0gradlew.bat" :app:assembleRelease --console=plain
 if errorlevel 1 exit /b %ERRORLEVEL%
-echo.
-echo Done. Install the arm64 APK, not universal:
-echo   adb install -r app\build\outputs\apk\release\app-arm64-v8a-release.apk
-exit /b 0
+goto install
+
+:install
+set "APK=%~dp0app\build\outputs\apk\release\app-arm64-v8a-release.apk"
+if not exist "%APK%" (
+    echo [ERROR] APK not found: %APK%
+    exit /b 1
+)
+set "ADB="
+if defined ANDROID_HOME if exist "%ANDROID_HOME%\platform-tools\adb.exe" set "ADB=%ANDROID_HOME%\platform-tools\adb.exe"
+if not defined ADB if defined ANDROID_SDK_ROOT if exist "%ANDROID_SDK_ROOT%\platform-tools\adb.exe" set "ADB=%ANDROID_SDK_ROOT%\platform-tools\adb.exe"
+if not defined ADB if exist "%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe" set "ADB=%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe"
+if not defined ADB (
+    where adb >nul 2>&1 && set "ADB=adb"
+)
+if not defined ADB (
+    echo [ERROR] adb not found. Connect a device and ensure Android SDK platform-tools is installed.
+    exit /b 1
+)
+echo Installing: %APK%
+"%ADB%" devices
+"%ADB%" install -r "%APK%"
+exit /b %ERRORLEVEL%
 
 :usage
 echo Usage: build-local.bat [gradle task...]

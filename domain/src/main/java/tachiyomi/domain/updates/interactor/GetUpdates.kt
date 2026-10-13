@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import tachiyomi.domain.hidden.HiddenModeManager
 import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.isHiddenEntry
+import tachiyomi.domain.hidden.isVisibleInHiddenSpace
 import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.updates.model.UpdatesWithRelations
 import tachiyomi.domain.updates.repository.UpdatesRepository
@@ -17,11 +19,12 @@ class GetUpdates(
     private val hiddenMode: HiddenModeManager,
 ) {
 
-    /** Never surfaces hidden manga — for one-shot callers that leave the app chrome. */
+    /** Never surfaces hidden manga/sources — for one-shot callers that leave the app chrome. */
     suspend fun await(read: Boolean, after: Instant): List<UpdatesWithRelations> {
-        val hidden = getHiddenIds.await(HiddenItemType.Manga)
+        val hiddenManga = getHiddenIds.await(HiddenItemType.Manga)
+        val hiddenSources = getHiddenIds.await(HiddenItemType.Source)
         return repository.awaitWithRead(read, after, limit = 500)
-            .filter { it.mangaId !in hidden }
+            .filter { !isHiddenEntry(it.mangaId, it.sourceId, hiddenManga, hiddenSources) }
     }
 
     /** Updates tab: respect the current hidden-space session. */
@@ -46,22 +49,32 @@ class GetUpdates(
                 excludedCategories = excludedCategories,
             ),
             getHiddenIds.subscribe(HiddenItemType.Manga),
+            getHiddenIds.subscribe(HiddenItemType.Source),
             hiddenMode.active,
-        ) { updates, hidden, inHiddenSpace ->
-            updates.filter { (it.mangaId in hidden) == inHiddenSpace }
+        ) { updates, hiddenManga, hiddenSources, inHiddenSpace ->
+            updates.filter {
+                isVisibleInHiddenSpace(
+                    mangaId = it.mangaId,
+                    sourceId = it.sourceId,
+                    hiddenMangaIds = hiddenManga,
+                    hiddenSourceIds = hiddenSources,
+                    inHiddenSpace = inHiddenSpace,
+                )
+            }
         }
     }
 
     /**
-     * Home-screen widgets and other launcher surfaces: always exclude hidden manga so entering
-     * the hidden space cannot leak covers onto the desktop.
+     * Home-screen widgets and other launcher surfaces: always exclude hidden manga/sources so
+     * entering the hidden space cannot leak covers onto the desktop.
      */
     fun subscribe(read: Boolean, after: Instant): Flow<List<UpdatesWithRelations>> {
         return combine(
             repository.subscribeWithRead(read, after, limit = 500),
             getHiddenIds.subscribe(HiddenItemType.Manga),
-        ) { updates, hidden ->
-            updates.filter { it.mangaId !in hidden }
+            getHiddenIds.subscribe(HiddenItemType.Source),
+        ) { updates, hiddenManga, hiddenSources ->
+            updates.filter { !isHiddenEntry(it.mangaId, it.sourceId, hiddenManga, hiddenSources) }
         }
     }
 }

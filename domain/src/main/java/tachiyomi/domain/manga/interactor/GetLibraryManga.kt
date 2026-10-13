@@ -10,6 +10,7 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.hidden.HiddenModeManager
 import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.isVisibleInHiddenSpace
 import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.library.model.LibraryManga
 import tachiyomi.domain.manga.repository.MangaRepository
@@ -34,19 +35,37 @@ class GetLibraryManga(
      * Library entries visible in the current hidden-space session (main UI vs hidden space).
      */
     suspend fun awaitVisible(): List<LibraryManga> {
-        val hidden = getHiddenIds.await(HiddenItemType.Manga)
+        val hiddenManga = getHiddenIds.await(HiddenItemType.Manga)
+        val hiddenSources = getHiddenIds.await(HiddenItemType.Source)
         val inHiddenSpace = hiddenMode.active.value
         return mangaRepository.getLibraryManga()
-            .filter { (it.manga.id in hidden) == inHiddenSpace }
+            .filter {
+                isVisibleInHiddenSpace(
+                    mangaId = it.manga.id,
+                    sourceId = it.manga.source,
+                    hiddenMangaIds = hiddenManga,
+                    hiddenSourceIds = hiddenSources,
+                    inHiddenSpace = inHiddenSpace,
+                )
+            }
     }
 
     fun subscribe(): Flow<List<LibraryManga>> {
         return combine(
             mangaRepository.getLibraryMangaAsFlow(),
             getHiddenIds.subscribe(HiddenItemType.Manga),
+            getHiddenIds.subscribe(HiddenItemType.Source),
             hiddenMode.active,
-        ) { manga, hidden, inHiddenSpace ->
-            manga.filter { (it.manga.id in hidden) == inHiddenSpace }
+        ) { manga, hiddenManga, hiddenSources, inHiddenSpace ->
+            manga.filter {
+                isVisibleInHiddenSpace(
+                    mangaId = it.manga.id,
+                    sourceId = it.manga.source,
+                    hiddenMangaIds = hiddenManga,
+                    hiddenSourceIds = hiddenSources,
+                    inHiddenSpace = inHiddenSpace,
+                )
+            }
         }
             .retry {
                 if (it is NullPointerException) {

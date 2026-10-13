@@ -956,6 +956,7 @@
     <string name="hidden_manager_hint">Checked entries disappear from the main screens.</string>
     <string name="hidden_manager_sources">Sources</string>
     <string name="hidden_manager_manga">Manga</string>
+    <string name="hidden_manager_source_langs">%1$d languages · %2$s</string>
     <string name="mirror_test_title">Mirror speed test</string>
     <string name="mirror_test_idle">Tap to test reachability and latency of each mirror</string>
     <string name="mirror_test_running">Testing…</string>

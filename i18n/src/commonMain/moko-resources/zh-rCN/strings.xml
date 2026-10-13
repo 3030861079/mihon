@@ -589,6 +589,7 @@
     <string name="hidden_manager_hint">勾选的条目会从主界面消失。</string>
     <string name="hidden_manager_sources">图源</string>
     <string name="hidden_manager_manga">漫画</string>
+    <string name="hidden_manager_source_langs">%1$d 种语言 · %2$s</string>
     <string name="mirror_test_title">镜像测速</string>
     <string name="mirror_test_idle">点击测试各镜像的连通性和延迟</string>
     <string name="mirror_test_running">正在测试…</string>

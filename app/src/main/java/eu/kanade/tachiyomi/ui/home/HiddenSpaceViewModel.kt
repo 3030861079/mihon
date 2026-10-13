@@ -70,4 +70,13 @@ class HiddenSpaceViewModel(
     fun setSourceHidden(sourceId: Long, hidden: Boolean) {
         viewModelScope.launch { toggleHidden.source(sourceId, hidden) }
     }
+
+    /** Hide/show every language variant of a multi-lang source family in one go. */
+    fun setSourcesHidden(sourceIds: Collection<Long>, hidden: Boolean) {
+        if (sourceIds.isEmpty()) return
+        viewModelScope.launch {
+            sourceIds.forEach { toggleHidden.source(it, hidden) }
+        }
+    }
 }
+

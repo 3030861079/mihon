@@ -1,9 +1,14 @@
 package tachiyomi.domain.history.interactor
 
 import dev.zacsweers.metro.Inject
+import kotlinx.coroutines.flow.first
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.service.getChapterSort
+import tachiyomi.domain.hidden.HiddenModeManager
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.isVisibleInHiddenSpace
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.history.repository.HistoryRepository
 import tachiyomi.domain.manga.interactor.GetManga
 import kotlin.math.max
@@ -13,10 +18,25 @@ class GetNextChapters(
     private val getChaptersByMangaId: GetChaptersByMangaId,
     private val getManga: GetManga,
     private val historyRepository: HistoryRepository,
+    private val getHiddenIds: GetHiddenIds,
+    private val hiddenMode: HiddenModeManager,
 ) {
 
     suspend fun await(onlyUnread: Boolean = true): List<Chapter> {
-        val history = historyRepository.getLastHistory() ?: return emptyList()
+        val hiddenManga = getHiddenIds.await(HiddenItemType.Manga)
+        val hiddenSources = getHiddenIds.await(HiddenItemType.Source)
+        val inHiddenSpace = hiddenMode.active.value
+        val history = historyRepository.getHistory("").first()
+            .firstOrNull {
+                isVisibleInHiddenSpace(
+                    mangaId = it.mangaId,
+                    sourceId = it.coverData.sourceId,
+                    hiddenMangaIds = hiddenManga,
+                    hiddenSourceIds = hiddenSources,
+                    inHiddenSpace = inHiddenSpace,
+                )
+            }
+            ?: return emptyList()
         return await(history.mangaId, history.chapterId, onlyUnread)
     }
 
