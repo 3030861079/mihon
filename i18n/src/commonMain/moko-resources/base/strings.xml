@@ -655,6 +655,10 @@
     <string name="error_user_agent_string_blank">User agent string can not be blank</string>
     <string name="error_user_agent_string_invalid">Invalid user agent string</string>
     <string name="pref_reset_user_agent_string">Reset default user agent string</string>
+    <string name="pref_image_referer">Send Referer on image requests</string>
+    <string name="pref_image_referer_summary">Fixes 403 errors from image hosts that enforce hotlink protection</string>
+    <string name="pref_image_referer_value">Custom Referer</string>
+    <string name="pref_image_referer_value_summary">Leave blank to use the image's own domain</string>
     <string name="requires_app_restart">Requires app restart to take effect</string>
     <string name="cookies_cleared">Cookies cleared</string>
     <string name="pref_invalidate_download_cache">Reindex downloads</string>
@@ -924,6 +928,39 @@
 
     <!-- Source Screen -->
     <string name="source_empty_screen">No source found</string>
+
+    <!-- Source connectivity check -->
+    <string name="action_check_sources">Check sources</string>
+    <string name="source_check_title">Source connectivity</string>
+    <string name="source_check_progress">Checking %1$d/%2$d…</string>
+    <string name="source_check_summary">%1$d reachable · %2$d failed</string>
+    <string name="source_check_status_ok">Reachable</string>
+    <string name="source_check_status_empty">No results</string>
+    <string name="source_check_status_timeout">Timed out</string>
+    <string name="source_check_status_error">Failed</string>
+    <string name="source_check_status_skipped">Not supported</string>
+    <string name="source_check_only_failed">Failed only</string>
+    <string name="manga_check_title">Connectivity check</string>
+    <string name="manga_check_chapter">Chapter: %1$s</string>
+    <string name="manga_check_pages">%1$d pages · checking first %2$d</string>
+    <string name="manga_check_image_n">Image %1$d</string>
+    <string name="manga_check_no_chapters">This manga has no chapters</string>
+    <string name="manga_check_unsupported">This source does not support the check</string>
+    <string name="manga_check_no_pages">Could not resolve image URLs</string>
+    <string name="manga_check_fetch_failed">Failed to load the chapter</string>
+    <string name="manga_check_not_image">Not an image</string>
+    <string name="hidden_space_title">Hidden space</string>
+    <string name="hidden_space_manage">Manage</string>
+    <string name="hidden_space_exit">Exit</string>
+    <string name="hidden_manager_title">Hidden entries</string>
+    <string name="hidden_manager_hint">Checked entries disappear from the main screens.</string>
+    <string name="hidden_manager_sources">Sources</string>
+    <string name="hidden_manager_manga">Manga</string>
+    <string name="mirror_test_title">Mirror speed test</string>
+    <string name="mirror_test_idle">Tap to test reachability and latency of each mirror</string>
+    <string name="mirror_test_running">Testing…</string>
+    <string name="mirror_test_current">current</string>
+    <string name="mirror_test_recommended">recommended</string>
 
     <!-- Source Filter Screen -->
     <string name="source_filter_empty_screen">No installed source found</string>

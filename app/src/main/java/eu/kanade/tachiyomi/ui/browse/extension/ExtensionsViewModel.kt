@@ -36,6 +36,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import tachiyomi.domain.hidden.HiddenModeManager
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.i18n.MR
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -48,6 +51,8 @@ class ExtensionsViewModel(
     basePreferences: BasePreferences,
     private val extensionManager: ExtensionManager,
     private val getExtensions: GetExtensionsByType,
+    private val getHiddenIds: GetHiddenIds,
+    private val hiddenMode: HiddenModeManager,
     private val context: Context,
 ) : ViewModel() {
 
@@ -75,25 +80,37 @@ class ExtensionsViewModel(
             .map { searchQueryPredicate(it ?: "") },
         currentDownloads,
         getExtensions.subscribe(),
-    ) { predicate, downloads, (_updates, _loaded, _available, _notLoaded) ->
+        getHiddenIds.subscribe(HiddenItemType.Source),
+        hiddenMode.active,
+    ) { predicate, downloads, (_updates, _loaded, _available, _notLoaded), hiddenSources, inHiddenSpace ->
+        fun Extension.servesHiddenSource() = when (this) {
+            is Extension.Loaded -> sources.any { it.id in hiddenSources }
+            is Extension.Available -> sources.any { it.id in hiddenSources }
+            else -> false
+        }
+
+        fun <T : Extension> List<T>.keptByHiddenSpace() =
+            filter { it.servesHiddenSource() == inHiddenSpace }
+
         buildMap {
-            val updates = _updates.filter(predicate).map(extensionMapper(downloads))
+            val updates = _updates.filter(predicate).keptByHiddenSpace().map(extensionMapper(downloads))
             if (updates.isNotEmpty()) {
                 put(ExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending), updates)
             }
 
-            val notLoaded = _notLoaded.filter(predicate).map(extensionMapper(downloads))
+            val notLoaded = _notLoaded.filter(predicate).keptByHiddenSpace().map(extensionMapper(downloads))
             if (notLoaded.isNotEmpty()) {
                 put(ExtensionUiModel.Header.Resource(MR.strings.ext_not_loaded), notLoaded)
             }
 
-            val loaded = _loaded.filter(predicate).map(extensionMapper(downloads))
+            val loaded = _loaded.filter(predicate).keptByHiddenSpace().map(extensionMapper(downloads))
             if (loaded.isNotEmpty()) {
                 put(ExtensionUiModel.Header.Resource(MR.strings.ext_installed), loaded)
             }
 
             val languagesWithExtensions = _available
                 .filter(predicate)
+                .keptByHiddenSpace()
                 .groupBy { it.lang }
                 .toSortedMap(LocaleHelper.comparator)
                 .map { (lang, exts) ->

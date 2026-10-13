@@ -1,0 +1,22 @@
+import kotlin.Long;
+
+CREATE TABLE hidden_item(
+    type INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(type, item_id)
+);
+
+getIdsByType:
+SELECT item_id
+FROM hidden_item
+WHERE type = :type;
+
+insert:
+INSERT OR IGNORE INTO hidden_item(type, item_id, created_at)
+VALUES (:type, :itemId, :createdAt);
+
+delete:
+DELETE FROM hidden_item
+WHERE type = :type
+AND item_id = :itemId;

@@ -64,6 +64,9 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.ReorderableLazyListState
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import tachiyomi.domain.hidden.HiddenModeManager
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.source.model.Source
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.MR
@@ -320,6 +323,8 @@ class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
     class Model(
         val sourcePreferences: SourcePreferences,
         private val sourceManager: SourceManager,
+        private val getHiddenIds: GetHiddenIds,
+        private val hiddenMode: HiddenModeManager,
     ) : ViewModel() {
 
         val state: StateFlow<Model.State>
@@ -350,6 +355,8 @@ class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
         }
 
         private suspend fun initSources() {
+            val hiddenSources = getHiddenIds.await(HiddenItemType.Source)
+            val inHiddenSpace = hiddenMode.active.value
             val languages = sourcePreferences.enabledLanguages.get()
             val pinnedSources = sourcePreferences.pinnedSources.get().mapNotNull { it.toLongOrNull() }
             val includedSources = sourcePreferences.migrationSources.get()
@@ -359,6 +366,7 @@ class MigrationConfigScreen(private val mangaIds: Collection<Long>) : Screen() {
                 .asSequence()
                 .filterIsInstance<HttpSource>()
                 .filter { it.lang in languages }
+                .filter { (it.id in hiddenSources) == inHiddenSpace }
                 .map {
                     val source = Source(
                         id = it.id,

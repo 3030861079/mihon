@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.app.di.appGraph
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
@@ -198,6 +199,9 @@ object SettingsAdvancedScreen : SearchableSettings {
         val userAgentPref = networkPreferences.defaultUserAgent
         val userAgent by userAgentPref.collectAsState()
 
+        val imageRefererEnabledPref = networkPreferences.imageRefererEnabled
+        val imageRefererEnabled by imageRefererEnabledPref.collectAsState()
+
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.label_network),
             preferenceItems = listOf(
@@ -274,6 +278,25 @@ object SettingsAdvancedScreen : SearchableSettings {
                     onClick = {
                         userAgentPref.delete()
                         context.toast(MR.strings.requires_app_restart)
+                    },
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = imageRefererEnabledPref,
+                    title = stringResource(MR.strings.pref_image_referer),
+                    subtitle = stringResource(MR.strings.pref_image_referer_summary),
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = networkPreferences.imageRefererValue,
+                    title = stringResource(MR.strings.pref_image_referer_value),
+                    subtitle = stringResource(MR.strings.pref_image_referer_value_summary),
+                    visible = imageRefererEnabled,
+                    onValueChanged = {
+                        // Blank means "derive from the image URL", anything else must be a URL
+                        if (it.isBlank()) {
+                            true
+                        } else {
+                            runCatching { it.toHttpUrl() }.isSuccess
+                        }
                     },
                 ),
             ),

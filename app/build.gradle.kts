@@ -147,6 +147,13 @@ android {
         resources {
             excludes += setOf(
                 "kotlin-tooling-metadata.json",
+                // 本机构建适配：sqldelight 与 metro 的 KMP 构件都带了同名的
+                // META-INF/kotlin-project-structure-metadata.json 与 commonMain/ 目录下的
+                // KMP 元数据，会触发 mergeDebugJavaResource 重复资源报错。
+                // 这些只是 Kotlin 多平台工程结构提示，不参与运行时，可安全排除。
+                // 还原：git checkout app/build.gradle.kts
+                "META-INF/kotlin-project-structure-metadata.json",
+                "commonMain/**",
                 "LICENSE.txt",
                 "META-INF/**/*.properties",
                 "META-INF/**/LICENSE.txt",
@@ -282,7 +289,14 @@ dependencies {
     implementation(libs.injekt)
     implementation(libs.metro.runtime)
     implementation(libs.metrox.viewmodel)
-    implementation(libs.metrox.viewmodel.compose)
+    // 本机构建适配：metro 的 compose 集成未发布 Android 变体，Android 构建只能解析到其 JVM 变体，
+    // 进而把 JetBrains Compose Multiplatform 的 lifecycle 桌面构件（lifecycle-*-desktop）带进 classpath，
+    // 与 AndroidX 的 lifecycle-viewmodel-compose-android 产生重复类（Duplicate class）。
+    // Android 上这些类由 AndroidX 提供，JetBrains 侧冗余，故排除该 group。
+    // 还原：git checkout app/build.gradle.kts
+    implementation(libs.metrox.viewmodel.compose) {
+        exclude(group = "org.jetbrains.androidx.lifecycle")
+    }
 
     // Image loading
     implementation(libs.bundles.coil)

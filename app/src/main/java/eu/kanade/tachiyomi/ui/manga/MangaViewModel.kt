@@ -21,6 +21,7 @@ import eu.kanade.core.util.addOrRemove
 import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.chapter.interactor.SetReadStatus
+import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.domain.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.manga.interactor.SetExcludedScanlators
 import eu.kanade.domain.manga.interactor.UpdateManga
@@ -41,16 +42,22 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.toast
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -70,10 +77,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import mihon.core.metro.AppCoroutineScope
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
+import okhttp3.Request
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
@@ -105,6 +114,7 @@ import tachiyomi.source.local.isLocal
 import kotlin.math.floor
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 @AssistedInject
 class MangaViewModel(
@@ -168,6 +178,16 @@ class MangaViewModel(
 
     private val filteredChapters: List<ChapterList.Item>?
         get() = successState?.processedChapters
+
+    private val _sourceCheck = MutableStateFlow<SourceCheckState>(SourceCheckState.Idle)
+    val sourceCheckState: StateFlow<SourceCheckState> = _sourceCheck.asStateFlow()
+
+    private var sourceCheckJob: Job? = null
+
+    private val pageListTimeout = 30.seconds
+    private val imageTimeout = 20.seconds
+    private val probeImageCount = 3
+    private val probePeekBytes = 4096L
 
     val chapterSwipeStartAction = libraryPreferences.swipeToEndAction.get()
     val chapterSwipeEndAction = libraryPreferences.swipeToStartAction.get()
@@ -1041,6 +1061,184 @@ class MangaViewModel(
         data object FullCover : Dialog
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Source connectivity check
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Probes whether this manga is actually readable right now, end to end.
+     *
+     * It walks the same path the reader does: it fetches the page list of the latest chapter and
+     * then really downloads its first few images.
+     *
+     * Succeeding at the API layer proves very little. Plenty of sources happily serve a chapter
+     * listing and then answer 403 for every single image (expired CDN signatures, hotlink
+     * protection, region blocks), which is exactly the failure this is meant to surface. Only a
+     * real image download tells you whether the manga is readable.
+     */
+    fun checkSourceConnectivity() {
+        if (sourceCheckJob?.isActive == true) return
+
+        val httpSource = source as? HttpSource
+        if (httpSource == null) {
+            _sourceCheck.value = SourceCheckState.Done(error = SourceCheckError.Unsupported)
+            return
+        }
+
+        val chapters = allChapters.orEmpty()
+        val latest = chapters
+            .filter { it.chapter.chapterNumber > 0.0 }
+            .maxByOrNull { it.chapter.chapterNumber }
+            ?: chapters.minByOrNull { it.chapter.sourceOrder }
+        if (latest == null) {
+            _sourceCheck.value = SourceCheckState.Done(error = SourceCheckError.NoChapters)
+            return
+        }
+
+        val chapterName = latest.chapter.name
+
+        sourceCheckJob = viewModelScope.launch {
+            _sourceCheck.value = SourceCheckState.Running(chapterName = chapterName)
+
+            val pages = try {
+                withContext(Dispatchers.IO) {
+                    withTimeout(pageListTimeout) { httpSource.getPageList(latest.chapter.toSChapter()) }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _sourceCheck.value = SourceCheckState.Done(chapterName, error = SourceCheckError.Timeout)
+                return@launch
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logcat(LogPriority.DEBUG, e) { "Connectivity check: page list request failed" }
+                _sourceCheck.value = SourceCheckState.Done(
+                    chapterName = chapterName,
+                    error = SourceCheckError.FetchFailed,
+                    errorDetail = e.message?.take(160) ?: e::class.simpleName,
+                )
+                return@launch
+            }
+
+            val targets = pages.take(probeImageCount)
+            if (targets.isEmpty()) {
+                _sourceCheck.value = SourceCheckState.Done(
+                    chapterName = chapterName,
+                    totalPages = pages.size,
+                    error = SourceCheckError.NoPages,
+                )
+                return@launch
+            }
+
+            _sourceCheck.value = SourceCheckState.Running(
+                chapterName = chapterName,
+                totalPages = pages.size,
+                total = targets.size,
+            )
+
+            val results = mutableListOf<ImageResult>()
+            targets.forEachIndexed { index, page ->
+                val url = page.imageUrl?.takeIf { it.isNotBlank() } ?: page.url
+                results += withContext(Dispatchers.IO) { probeImage(httpSource, index, url) }
+                _sourceCheck.value = SourceCheckState.Running(
+                    chapterName = chapterName,
+                    totalPages = pages.size,
+                    total = targets.size,
+                    completed = results.size,
+                    results = results.toList(),
+                )
+            }
+
+            _sourceCheck.value = SourceCheckState.Done(
+                chapterName = chapterName,
+                totalPages = pages.size,
+                results = results.toList(),
+            )
+        }
+    }
+
+    private fun probeImage(source: HttpSource, index: Int, url: String): ImageResult {
+        val mark = TimeSource.Monotonic.markNow()
+        fun elapsed() = mark.elapsedNow().inWholeMilliseconds
+
+        return try {
+            val request = Request.Builder()
+                .url(url)
+                .headers(source.headers)
+                .build()
+            val client = source.client.newBuilder()
+                .callTimeout(imageTimeout)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val contentType = response.header("Content-Type")
+                val bytes = try {
+                    response.peekBody(probePeekBytes).bytes().size.toLong()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    0L
+                }
+
+                when {
+                    !response.isSuccessful -> ImageResult(
+                        index = index,
+                        url = url,
+                        ok = false,
+                        code = response.code,
+                        bytes = bytes,
+                        elapsedMs = elapsed(),
+                        error = SourceCheckError.HttpError,
+                    )
+
+                    !isImageContentType(contentType) -> ImageResult(
+                        index = index,
+                        url = url,
+                        ok = false,
+                        code = response.code,
+                        bytes = bytes,
+                        elapsedMs = elapsed(),
+                        error = SourceCheckError.NotImage,
+                        detail = contentType,
+                    )
+
+                    else -> ImageResult(
+                        index = index,
+                        url = url,
+                        ok = true,
+                        code = response.code,
+                        bytes = bytes,
+                        elapsedMs = elapsed(),
+                    )
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            logcat(LogPriority.DEBUG, e) { "Connectivity check: image request failed" }
+            ImageResult(
+                index = index,
+                url = url,
+                ok = false,
+                code = null,
+                bytes = 0L,
+                elapsedMs = elapsed(),
+                error = if (e is SocketTimeoutException || e is InterruptedIOException) {
+                    SourceCheckError.Timeout
+                } else {
+                    SourceCheckError.Error
+                },
+                detail = e.message?.take(160) ?: e::class.simpleName,
+            )
+        }
+    }
+
+    /** Dismisses the results and stops an in-flight check. */
+    fun dismissSourceCheck() {
+        sourceCheckJob?.cancel()
+        sourceCheckJob = null
+        _sourceCheck.value = SourceCheckState.Idle
+    }
+
     fun dismissDialog() {
         dialog.value = null
     }
@@ -1177,4 +1375,60 @@ sealed class ChapterList {
         val id = chapter.id
         val isDownloaded = downloadState == Download.State.DOWNLOADED
     }
+}
+
+/** Whether an image content type looks like something we can actually display. */
+private fun isImageContentType(contentType: String?): Boolean {
+    val value = contentType?.lowercase().orEmpty()
+    return value.startsWith("image/") ||
+        value.startsWith("application/octet-stream") ||
+        value.startsWith("binary/octet-stream")
+}
+
+/** Progress/result of the per-manga source connectivity check. */
+@Immutable
+sealed interface SourceCheckState {
+    data object Idle : SourceCheckState
+
+    data class Running(
+        val chapterName: String,
+        val totalPages: Int = 0,
+        val total: Int = 0,
+        val completed: Int = 0,
+        val results: List<ImageResult> = emptyList(),
+    ) : SourceCheckState
+
+    data class Done(
+        val chapterName: String? = null,
+        val totalPages: Int = 0,
+        val results: List<ImageResult> = emptyList(),
+        val error: SourceCheckError? = null,
+        val errorDetail: String? = null,
+    ) : SourceCheckState {
+        val okCount: Int get() = results.count { it.ok }
+        val failedCount: Int get() = results.size - okCount
+    }
+}
+
+@Immutable
+data class ImageResult(
+    val index: Int,
+    val url: String,
+    val ok: Boolean,
+    val code: Int? = null,
+    val bytes: Long = 0L,
+    val elapsedMs: Long = 0L,
+    val error: SourceCheckError? = null,
+    val detail: String? = null,
+)
+
+enum class SourceCheckError {
+    Unsupported,
+    NoChapters,
+    NoPages,
+    Timeout,
+    FetchFailed,
+    HttpError,
+    NotImage,
+    Error,
 }

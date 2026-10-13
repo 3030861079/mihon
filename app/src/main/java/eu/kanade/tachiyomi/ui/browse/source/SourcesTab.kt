@@ -10,6 +10,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import eu.kanade.presentation.browse.SourceOptionsDialog
 import eu.kanade.presentation.browse.SourcesScreen
+import eu.kanade.presentation.browse.components.SourceCheckSheet
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.tachiyomi.ui.browse.source.browse.BrowseSourceScreen
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.FilterList
+import mihon.icons.materialsymbols.rounded.NetworkCheck
 import mihon.icons.materialsymbols.rounded.TravelExplore
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -40,6 +42,11 @@ fun Screen.sourcesTab(): TabContent {
                 title = stringResource(MR.strings.action_filter),
                 icon = MaterialSymbols.Rounded.FilterList,
                 onClick = { navigator.push(SourcesFilterScreen()) },
+            ),
+            AppBar.Action(
+                title = stringResource(MR.strings.action_check_sources),
+                icon = MaterialSymbols.Rounded.NetworkCheck,
+                onClick = viewModel::startSourceCheck,
             ),
         ),
         content = { contentPadding, snackbarHostState ->
@@ -66,6 +73,14 @@ fun Screen.sourcesTab(): TabContent {
                         viewModel.closeDialog()
                     },
                     onDismiss = viewModel::closeDialog,
+                )
+            }
+
+            state.check?.let { check ->
+                SourceCheckSheet(
+                    state = check,
+                    onDismiss = viewModel::dismissSourceCheck,
+                    onRetry = viewModel::startSourceCheck,
                 )
             }
 

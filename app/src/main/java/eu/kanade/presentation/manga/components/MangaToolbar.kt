@@ -20,6 +20,7 @@ import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Download
 import mihon.icons.materialsymbols.rounded.FilterList
 import mihon.icons.materialsymbols.rounded.FlipToBack
+import mihon.icons.materialsymbols.rounded.NetworkCheck
 import mihon.icons.materialsymbols.rounded.SelectAll
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -37,6 +38,7 @@ fun MangaToolbar(
     onClickRefresh: () -> Unit,
     onClickMigrate: (() -> Unit)?,
     onClickEditNotes: () -> Unit,
+    onClickCheckConnectivity: (() -> Unit)?,
 
     // For action mode
     actionModeCounter: Int,
@@ -99,6 +101,15 @@ fun MangaToolbar(
                                 title = stringResource(MR.strings.manga_download),
                                 icon = MaterialSymbols.Rounded.Download,
                                 onClick = { downloadExpanded = !downloadExpanded },
+                            ),
+                        )
+                    }
+                    if (onClickCheckConnectivity != null) {
+                        add(
+                            AppBar.Action(
+                                title = stringResource(MR.strings.manga_check_title),
+                                icon = MaterialSymbols.Rounded.NetworkCheck,
+                                onClick = onClickCheckConnectivity,
                             ),
                         )
                     }

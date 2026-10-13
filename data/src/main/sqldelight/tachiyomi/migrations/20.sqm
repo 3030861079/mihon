@@ -1,0 +1,9 @@
+-- Items the user marked as hidden. They are kept out of the main screens and only show up
+-- inside the hidden space.
+
+CREATE TABLE hidden_item(
+    type INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(type, item_id)
+);
