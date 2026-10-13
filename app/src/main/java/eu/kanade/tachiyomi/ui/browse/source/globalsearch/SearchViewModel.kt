@@ -22,6 +22,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mihon.domain.manga.model.toDomainManga
 import tachiyomi.core.common.preference.toggle
+import tachiyomi.domain.hidden.HiddenModeManager
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.model.Manga
@@ -36,6 +39,8 @@ abstract class SearchViewModel(
     private val networkToLocalManga: NetworkToLocalManga,
     private val getManga: GetManga,
     private val preferences: SourcePreferences,
+    private val getHiddenIds: GetHiddenIds,
+    private val hiddenMode: HiddenModeManager,
 ) : ViewModel() {
 
     val state: StateFlow<State>
@@ -87,8 +92,11 @@ abstract class SearchViewModel(
     }
 
     open suspend fun getEnabledSources(): List<Source> {
+        val hidden = getHiddenIds.await(HiddenItemType.Source)
+        val inHiddenSpace = hiddenMode.active.value
         return sourceManager.getAll()
             .filter { (it.lang in enabledLanguages || it.isLocal()) && "${it.id}" !in disabledSources }
+            .filter { (it.id in hidden) == inHiddenSpace }
             .sortedWith(
                 compareBy(
                     { "${it.id}" !in pinnedSources },

@@ -22,7 +22,18 @@ class GetLibraryManga(
     private val hiddenMode: HiddenModeManager,
 ) {
 
+    /**
+     * Full library, ignoring the hidden-space session. Use this for background workers that must
+     * keep every entry up to date regardless of which space the UI is showing.
+     */
     suspend fun await(): List<LibraryManga> {
+        return mangaRepository.getLibraryManga()
+    }
+
+    /**
+     * Library entries visible in the current hidden-space session (main UI vs hidden space).
+     */
+    suspend fun awaitVisible(): List<LibraryManga> {
         val hidden = getHiddenIds.await(HiddenItemType.Manga)
         val inHiddenSpace = hiddenMode.active.value
         return mangaRepository.getLibraryManga()

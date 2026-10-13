@@ -11,6 +11,8 @@ import mihon.core.common.extensions.toByteArray
 import mihon.core.common.extensions.toEpochMillisOrZero
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.chapter.repository.ChapterRepository
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.history.interactor.GetHistory
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
@@ -23,17 +25,20 @@ class MangaBackupCreator(
     private val trackRepository: TrackRepository,
     private val getCategories: GetCategories,
     private val getHistory: GetHistory,
+    private val getHiddenIds: GetHiddenIds,
 ) {
 
     suspend operator fun invoke(mangas: List<Manga>, options: BackupOptions): List<BackupManga> {
+        val hiddenManga = getHiddenIds.await(HiddenItemType.Manga)
         return mangas.map {
-            backupManga(it, options)
+            backupManga(it, options, hidden = it.id in hiddenManga)
         }
     }
 
-    private suspend fun backupManga(manga: Manga, options: BackupOptions): BackupManga {
+    private suspend fun backupManga(manga: Manga, options: BackupOptions, hidden: Boolean): BackupManga {
         // Entry for this manga
         val mangaObject = manga.toBackupManga()
+        mangaObject.hidden = hidden
 
         mangaObject.excludedScanlators = mangaRepository.getExcludedScanlators(manga.id).toList()
 

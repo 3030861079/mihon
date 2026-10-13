@@ -27,6 +27,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import tachiyomi.domain.hidden.HiddenModeManager
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -35,18 +38,28 @@ import kotlin.time.Duration.Companion.seconds
 @ContributesIntoMap(AppScope::class)
 class DownloadQueueViewModel(
     private val downloadManager: DownloadManager,
+    getHiddenIds: GetHiddenIds,
+    hiddenMode: HiddenModeManager,
 ) : ViewModel() {
 
-    val state: StateFlow<List<DownloadHeaderItem>> = downloadManager.queueState
-        .map { downloads ->
-            downloads
-                .groupBy { it.source }
-                .map { entry ->
-                    DownloadHeaderItem(entry.key.id, entry.key.name, entry.value.size).apply {
-                        addSubItems(0, entry.value.map { DownloadItem(it, this) })
-                    }
+    val state: StateFlow<List<DownloadHeaderItem>> = combine(
+        downloadManager.queueState,
+        getHiddenIds.subscribe(HiddenItemType.Manga),
+        getHiddenIds.subscribe(HiddenItemType.Source),
+        hiddenMode.active,
+    ) { downloads, hiddenManga, hiddenSources, inHiddenSpace ->
+        downloads
+            .filter { download ->
+                val isHidden = download.manga.id in hiddenManga || download.source.id in hiddenSources
+                isHidden == inHiddenSpace
+            }
+            .groupBy { it.source }
+            .map { entry ->
+                DownloadHeaderItem(entry.key.id, entry.key.name, entry.value.size).apply {
+                    addSubItems(0, entry.value.map { DownloadItem(it, this) })
                 }
-        }
+            }
+    }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5.seconds), emptyList())
 

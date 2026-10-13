@@ -1137,8 +1137,27 @@ class MangaViewModel(
 
             val results = mutableListOf<ImageResult>()
             targets.forEachIndexed { index, page ->
-                val url = page.imageUrl?.takeIf { it.isNotBlank() } ?: page.url
-                results += withContext(Dispatchers.IO) { probeImage(httpSource, index, url) }
+                results += withContext(Dispatchers.IO) {
+                    val url = try {
+                        page.imageUrl?.takeIf { it.isNotBlank() }
+                            ?: httpSource.getImageUrl(page).also { page.imageUrl = it }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        logcat(LogPriority.DEBUG, e) { "Connectivity check: getImageUrl failed" }
+                        return@withContext ImageResult(
+                            index = index,
+                            url = page.url,
+                            ok = false,
+                            code = null,
+                            bytes = 0L,
+                            elapsedMs = 0L,
+                            error = SourceCheckError.Error,
+                            detail = e.message?.take(160) ?: e::class.simpleName,
+                        )
+                    }
+                    probeImage(httpSource, index, url)
+                }
                 _sourceCheck.value = SourceCheckState.Running(
                     chapterName = chapterName,
                     totalPages = pages.size,

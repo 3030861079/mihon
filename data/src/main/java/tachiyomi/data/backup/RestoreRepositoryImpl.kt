@@ -16,12 +16,14 @@ import tachiyomi.domain.backup.model.RestoredManga
 import tachiyomi.domain.backup.repository.RestoreRepository
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.repository.ChapterRepository
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaUpdate
 import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.track.model.Track
 import tachiyomi.domain.track.repository.TrackRepository
 import kotlin.math.max
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 @Inject
@@ -67,6 +69,13 @@ class RestoreRepositoryImpl(
         restoreTracking(manga, entry.tracks)
         restoreHistory(manga, entry.history)
         restoreExcludedScanlators(manga, entry.excludedScanlators)
+        if (entry.hidden) {
+            database.hidden_itemQueries.insert(
+                type = HiddenItemType.Manga.value,
+                itemId = manga.id,
+                createdAt = Clock.System.now().toEpochMilliseconds(),
+            )
+        }
         return manga
     }
 

@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.hidden.interactor.ToggleHidden
 import tachiyomi.domain.source.repository.StubSourceRepository
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.i18n.MR
@@ -53,6 +54,7 @@ class BackupRestorer(
     private val backupDecoder: BackupDecoder,
     private val sourceManager: SourceManager,
     private val stubSourceRepository: StubSourceRepository,
+    private val toggleHidden: ToggleHidden,
 ) {
 
     @AssistedFactory
@@ -136,12 +138,17 @@ class BackupRestorer(
             if (options.sourceSettings) {
                 restoreSourcePreferences(backup.backupSourcePreferences)
             }
-            if (options.libraryEntries) {
+            val restoreMangaJob = if (options.libraryEntries) {
                 restoreManga(
                     backup.backupManga,
                     if (options.categories) backup.backupCategories else emptyList(),
                     restoreCategoriesJob,
                 )
+            } else {
+                null
+            }
+            if (options.libraryEntries && backup.backupHiddenSources.isNotEmpty()) {
+                restoreHiddenSources(backup.backupHiddenSources, restoreMangaJob)
             }
             if (options.extensionStores) {
                 restoreExtensionStores(backup.backupExtensionStores)
@@ -172,6 +179,18 @@ class BackupRestorer(
             restoreAmount,
             isSync,
         )
+    }
+
+    private fun CoroutineScope.restoreHiddenSources(
+        hiddenSourceIds: List<Long>,
+        mangaRestoreJob: Job?,
+    ) = launch {
+        mangaRestoreJob?.join()
+        ensureActive()
+        hiddenSourceIds.forEach { sourceId ->
+            ensureActive()
+            toggleHidden.source(sourceId, hidden = true)
+        }
     }
 
     private fun CoroutineScope.restoreManga(

@@ -12,6 +12,7 @@ data class RestoredManga(
     val history: List<RestoredHistory>,
     val tracks: List<Track>,
     val excludedScanlators: List<String>,
+    val hidden: Boolean = false,
 )
 
 data class RestoredHistory(

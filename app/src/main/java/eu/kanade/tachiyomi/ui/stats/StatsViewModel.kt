@@ -50,7 +50,7 @@ class StatsViewModel(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            val libraryManga = getLibraryManga.await()
+            val libraryManga = getLibraryManga.awaitVisible()
 
             val distinctLibraryManga = libraryManga.fastDistinctBy { it.id }
 

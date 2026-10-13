@@ -14,6 +14,9 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SearchItemResult
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SearchViewModel
 import kotlinx.coroutines.launch
+import tachiyomi.domain.hidden.HiddenModeManager
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.source.service.SourceManager
@@ -27,6 +30,8 @@ class MigrateSearchViewModel(
     getManga: GetManga,
     preferences: SourcePreferences,
     private val sourceManager: SourceManager,
+    private val getHiddenIds: GetHiddenIds,
+    private val hiddenMode: HiddenModeManager,
 ) : SearchViewModel(
     sourcePreferences = sourcePreferences,
     sourceManager = sourceManager,
@@ -34,6 +39,8 @@ class MigrateSearchViewModel(
     networkToLocalManga = networkToLocalManga,
     getManga = getManga,
     preferences = preferences,
+    getHiddenIds = getHiddenIds,
+    hiddenMode = hiddenMode,
 ) {
     @AssistedFactory
     @ManualViewModelAssistedFactoryKey
@@ -65,6 +72,10 @@ class MigrateSearchViewModel(
     }
 
     override suspend fun getEnabledSources(): List<Source> {
-        return migrationSources.mapNotNull { sourceManager.get(it) }
+        val hidden = getHiddenIds.await(HiddenItemType.Source)
+        val inHiddenSpace = hiddenMode.active.value
+        return migrationSources
+            .mapNotNull { sourceManager.get(it) }
+            .filter { (it.id in hidden) == inHiddenSpace }
     }
 }

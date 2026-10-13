@@ -28,6 +28,8 @@ import okio.sink
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.backup.service.BackupPreferences
+import tachiyomi.domain.hidden.interactor.GetHiddenIds
+import tachiyomi.domain.hidden.model.HiddenItemType
 import tachiyomi.domain.manga.interactor.GetFavorites
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.repository.MangaRepository
@@ -46,6 +48,7 @@ class BackupCreator(
     private val getFavorites: GetFavorites,
     private val backupPreferences: BackupPreferences,
     private val mangaRepository: MangaRepository,
+    private val getHiddenIds: GetHiddenIds,
     private val categoriesBackupCreator: CategoriesBackupCreator,
     private val mangaBackupCreator: MangaBackupCreator,
     private val preferenceBackupCreator: PreferenceBackupCreator,
@@ -92,6 +95,11 @@ class BackupCreator(
                 backupPreferences = backupAppPreferences(options),
                 backupExtensionStores = backupExtensionStores(options),
                 backupSourcePreferences = backupSourcePreferences(options),
+                backupHiddenSources = if (options.libraryEntries) {
+                    getHiddenIds.await(HiddenItemType.Source).toList()
+                } else {
+                    emptyList()
+                },
             )
 
             val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)

@@ -4,16 +4,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
@@ -39,6 +37,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -113,7 +113,51 @@ object HomeScreen : Screen() {
         ) { tabNavigator ->
             // Provide usable navigator to content screen
             CompositionLocalProvider(LocalNavigator provides navigator) {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Observe top-left title taps without consuming them, so toolbar actions still work.
+                        .pointerInput(hiddenSpaceActive) {
+                            val regionWidth = 180.dp.toPx()
+                            val regionHeight = 56.dp.toPx()
+                            val statusBarTop = WindowInsets.statusBars.getTop(this).toFloat()
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val down = awaitPointerEvent(PointerEventPass.Initial)
+                                        .changes
+                                        .firstOrNull { it.pressed && !it.previousPressed }
+                                        ?: continue
+                                    val pos = down.position
+                                    if (pos.x !in 0f..regionWidth ||
+                                        pos.y !in statusBarTop..(statusBarTop + regionHeight)
+                                    ) {
+                                        continue
+                                    }
+                                    // Wait for release; never consume so children still receive the tap.
+                                    do {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    } while (event.changes.any { it.pressed })
+
+                                    val now = System.currentTimeMillis()
+                                    hiddenTapCount =
+                                        if (now - hiddenTapAt <= HiddenSpaceTapWindowMs) {
+                                            hiddenTapCount + 1
+                                        } else {
+                                            1
+                                        }
+                                    hiddenTapAt = now
+                                    if (hiddenTapCount >= HiddenSpaceTapCount) {
+                                        hiddenTapCount = 0
+                                        if (hiddenSpaceActive) {
+                                            hiddenSpaceViewModel.exit()
+                                        } else {
+                                            hiddenSpaceViewModel.enter()
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                ) {
                     val tabletUi = isTabletUi()
                     val navigationSuiteType = if (tabletUi) {
                         NavigationSuiteType.NavigationRail
@@ -159,31 +203,6 @@ object HomeScreen : Screen() {
                             }
                         }
                     }
-
-                    // Secret entrance: the top-left title area opens/closes the hidden space.
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .statusBarsPadding()
-                            .size(width = 180.dp, height = 56.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                val now = System.currentTimeMillis()
-                                hiddenTapCount =
-                                    if (now - hiddenTapAt <= HiddenSpaceTapWindowMs) hiddenTapCount + 1 else 1
-                                hiddenTapAt = now
-                                if (hiddenTapCount >= HiddenSpaceTapCount) {
-                                    hiddenTapCount = 0
-                                    if (hiddenSpaceActive) {
-                                        hiddenSpaceViewModel.exit()
-                                    } else {
-                                        hiddenSpaceViewModel.enter()
-                                    }
-                                }
-                            },
-                    )
 
                     if (hiddenSpaceActive) {
                         Row(

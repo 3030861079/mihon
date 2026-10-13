@@ -17,13 +17,14 @@ class GetUpdates(
     private val hiddenMode: HiddenModeManager,
 ) {
 
+    /** Never surfaces hidden manga — for one-shot callers that leave the app chrome. */
     suspend fun await(read: Boolean, after: Instant): List<UpdatesWithRelations> {
         val hidden = getHiddenIds.await(HiddenItemType.Manga)
-        val inHiddenSpace = hiddenMode.active.value
         return repository.awaitWithRead(read, after, limit = 500)
-            .filter { (it.mangaId in hidden) == inHiddenSpace }
+            .filter { it.mangaId !in hidden }
     }
 
+    /** Updates tab: respect the current hidden-space session. */
     fun subscribe(
         instant: Instant,
         unread: Boolean?,
@@ -51,13 +52,16 @@ class GetUpdates(
         }
     }
 
+    /**
+     * Home-screen widgets and other launcher surfaces: always exclude hidden manga so entering
+     * the hidden space cannot leak covers onto the desktop.
+     */
     fun subscribe(read: Boolean, after: Instant): Flow<List<UpdatesWithRelations>> {
         return combine(
             repository.subscribeWithRead(read, after, limit = 500),
             getHiddenIds.subscribe(HiddenItemType.Manga),
-            hiddenMode.active,
-        ) { updates, hidden, inHiddenSpace ->
-            updates.filter { (it.mangaId in hidden) == inHiddenSpace }
+        ) { updates, hidden ->
+            updates.filter { it.mangaId !in hidden }
         }
     }
 }
